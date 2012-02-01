@@ -139,6 +139,8 @@ if __name__ == "__main__":
     fp, fn, tp, tn = compute_ratios(tau_opt1)
     print "with the mutual information, found TP %d, FP %d, TN %d, FN %d" % \
         (tp, fp, tn, fn)
+    print "tau %f" % tau_opt1
+
 
     fig = plt.figure(3)
     ax = fig.add_subplot(111)
