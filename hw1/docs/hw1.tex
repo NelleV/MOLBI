@@ -1,0 +1,166 @@
+\documentclass{article}
+%\usepackage[latin1]{inputenc}
+\usepackage{graphicx,amssymb,amsmath,amsbsy,MnSymbol} % extensions pour maths
+\usepackage{graphicx,mathenv}           % extensions pour figures
+\usepackage[T1]{fontenc}        % pour les charactères accentués 
+\usepackage[utf8]{inputenc} 
+\usepackage{multicol}
+\usepackage{wrapfig}
+\usepackage{stmaryrd} % Pour les crochets d'ensemble d'entier
+\usepackage{float}  % Pour placer les images là ou JE veux.
+
+\DeclareMathOperator{\tr}{tr}
+\DeclareMathOperator{\argmax}{argmax}
+\DeclareMathOperator{\argmin}{argmin}
+\DeclareMathOperator{\cov}{cov}
+
+
+\setlength{\parindent}{0.0in}
+\setlength{\parskip}{0.1in}
+\setlength{\topmargin}{-0.4in}
+\setlength{\topskip}{0.7in}    % between header and text
+\setlength{\textheight}{9in} % height of main text
+\setlength{\textwidth}{6in}    % width of text
+\setlength{\oddsidemargin}{0in} % odd page left margin
+\setlength{\evensidemargin}{0in} % even page left margin
+%
+%% Quelques raccourcis clavier :
+\def\slantfrac#1#2{\kern.1em^{#1}\kern-.3em/\kern-.1em_{#2}}
+\def\b#1{\mathbf{#1}}
+\def\bs#1{\boldsymbol{#1}}
+\def\m#1{\mathrm{#1}}
+\bibliographystyle{acm}
+%
+\newcommand{\greeksym}[1]{{\usefont{U}{psy}{m}{n}#1}}
+\newcommand{\inc}{\mbox{\small\greeksym{d}\hskip 0.05ex}}%
+\pagenumbering{arabic}
+\date{\today}
+\title{HW1 - Detecting Differentially Expressed Genes}
+\author{Nelle Varoquaux}
+\begin{document}
+\maketitle
+
+\section{Model}
+Given the phenotype, all expressions over genes and samples are independant.
+We assume that the first $d_1$ genes are distributed with
+$\mathcal{B}(p_1^i)$, given $Y = i$, and the next genes are
+$\mathcal{B}(p_2^i)$, \dots
+
+\begin{align*}
+P(X | Y = i) & = & \prod_{j = 1}^d p_j^i (1 - p_j)^{1 - i} \\
+	     & = & p_1^{id_2}p_1^{(1 - i)d_2} p_2^{id_2}p_2^{(1 - i)d_2}
+	     \dots p_k^{id_1}p_k^{(1 - i)d_k}
+\end{align*}
+
+\section{The Data}
+
+The genes from $d_2$ and $d_3$ are differentially expressed. The set of genes
+from $d_2$ are harder to distinguish.
+
+The more samples we have, the easier it will be to differentiate the harder
+set.
+
+\section{Mutual Information Estimator}
+
+For empirical data, we have:
+\begin{align*}
+\hat{I}(X, Y) & = & H(X) - H(X | Y) \\
+	      & = & - \hat{p}(X = 0) \log(\hat{p}(X = 0)) - \hat{p}(X = 1)
+	      \log(\hat{p}(X= 1)) \\
+	      &  & + p(Y = 0)\{ \hat{p}(X = 0 | Y = 0) \log(\hat{p}(X= 0 | Y = 0)) +
+		   \hat{p}(X = 0 | Y = 1) \log(\hat{p}(X = 0 | Y = 1)) \} \\
+	      &  & + p(Y = 1) \{\hat{p}(X = 1 | Y = 0) \log(\hat{p}(X = 1 | Y = 0)) +
+		   \hat{p}(X = 1 | Y = 1) \log(\hat{p}(X = 1 | Y = 1)) \} \\
+	      & = & - \frac{n_0}{n} \log(\frac{n_0}{n}) - \frac{1 - n_0}{n}
+	      \log(\frac{1 - n_0}{n}) +  \\
+	      &  & \frac{1}{2} \{\frac{n_{00}}{\frac{1}{2} n} \log \( 
+	      \frac{n_{00}}{\frac{1}{2} n} \) +  \frac{1 - n_{00}}{\frac{1}{2} n} \log \(
+	      \frac{1 - n_{00}}{\frac{1}{2} n} \) + \frac{n_{01}}{\frac{1}{2} n} \log \( 
+	      \frac{n_{01}}{\frac{1}{2} n} \) +  \frac{1 - n_{01}}{\frac{1}{2} n} \log \(
+	      \frac{1 - n_{01}}{\frac{1}{2} n}\) \}
+\end{align*}
+
+We can also calculate the mutual information estimator analytically:
+
+% TODO
+
+\section{Mutual Information and Different Sample Sizes}
+
+\begin{figure}
+\begin{center}
+\includegraphics[width=300px]{./images/MI.png}
+\end{center}
+\caption{Mutual information for $n=10$, $n=100$ \& $n=1000$}
+\end{figure}
+
+For $n = 10$, it is hard to distinguish the two different distributions. Yet,
+for the last distribution, ie the last 100 genes, the mutual information is
+much higher than for the first two. With $n$ increasing, we start to
+distinguish the second set of genes, corresponding to the second distribution.
+The mutual information for the first set of genes decreases, and is almost 0
+for $n = 1000$, which means that the two distributions for $Y = 0$ and $Y = 1$
+are the same.
+The mutual information can therefore be used to detect DE genes, by setting a
+threshold.
+
+
+\section{Discovering DE genes using Mutual Information and ROC Curve}
+\begin{figure}
+\begin{center}
+\includegraphics[width=300px]{./images/MI_ROC.png}
+\end{center}
+\caption{ROC curve for setting a threshold on the Mutual Information}
+\end{figure}
+
+One can use a threshold $\tau$ on the mutual information to infer whether a
+gene is DE or not. To choose such a threshold, we plot the ROC curve.
+
+We can observe that when the number of samples increases, the algorithm yields
+better results: the ROC curve approaches the optimal ROC curve for $n = 1000$.
+
+Choosing the threshold $\tau$ implies making a compromise between the ratio of
+true positive and of false positive. Ideally, we would like to have 100\% of
+true positives, and no false positives.
+
+In the ROC space, the Identity function ($f(y) = x$) corresponds to the ROC
+curve of a random decision function. In order to find the best $\tau$, we need
+to find $\tau$ for which the distance of the point of the ROC curve
+corresponding to $\tau$ is maximum.
+
+For $n=10$, $\tau_{opt} = 0.076246$, which yields $200$ True Positives, $878$
+False Positive, $122$ True Negatives, and $0$ False Positives.
+
+For $n=100$, $\tau_{opt} = 0.016230$, which yields $200$ True Positives, $970$
+False Positive, $30$ True Negatives, and $0$ False Positives.
+
+For $n = 1000$, $\tau_{opt} = 0.002162$, which yields $183$ True Positives, $43$
+False Positives, $957$ True Negatives, $17$ False Negative.
+
+
+\section{DE genes and Fisher's Exact Test}
+\begin{figure}
+\begin{center}
+\includegraphics[width=300px]{./images/FET_ROC.png}
+\end{center}
+\caption{ROC curve for Fisher's Exact Test}
+\end{figure}
+
+In order to plot the ROC curve, we threshold the distance of the pvalue to
+$\frac{1}{2}$.
+
+For $n=10$ $\tau_{opt} = 0.417$ which yields $194$ True Positives, $165$
+False Positives, $835$ True Negatives, $6$ False Negative.
+
+For $n=100$ $\tau_{opt} = 0.476$ which yields $183$ True Positives, $46$
+False Positives, $954$ True Negatives, $17$ False Negative.
+
+For $n=1000$ $\tau_{opt} = 0.475$ which yields $192$ True Positives, $51$
+False Positives, $949$ True Negatives, $8$ False Negative.
+
+\section{Discussion}
+With few samples, the mutual informations performs horribly, while the Fisher
+Exact Test performs quite well.
+
+With many samples ($n=1000$), the mutual information yields better results
+than the Fisher Exact Test.
+\end{document}
