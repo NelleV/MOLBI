@@ -1,8 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
 
-from fisher import pvalue
-
 from sklearn.externals.joblib import Memory
 
 from data import generate_data
@@ -72,8 +70,6 @@ def roc_curves(n_samples, p_value=False):
     roc_y = []
     for tau in erange:
         pos = I > tau
-        fp = pos[:1000].sum()
-        fn = (1 - pos[1000:]).sum()
         tp = pos[1000:].sum()
         tn = (1 - pos[:1000]).sum()
         roc_x.append(float(tp) / (200))
@@ -100,8 +96,7 @@ def compute_ratios(tau, p_value=False):
 if __name__ == "__main__":
     fig = plt.figure(1)
     mem = Memory(cachedir='.')
-    for i, n_samples in enumerate([10, 100]):
-
+    for i, n_samples in enumerate([10, 100, 1000]):
         nI = mem.cache(n_mutual_information)(100, n_samples)
         mean, var = nI.mean(axis=0), nI.var(axis=0)
         ax = fig.add_subplot(3, 2, i * 2 + 1)
@@ -109,10 +104,17 @@ if __name__ == "__main__":
         ax = fig.add_subplot(3, 2, i * 2 + 2)
         ax.bar(range(1200), var)
 
+    fig = plt.figure(4)
+    for i, n_samples in enumerate([10, 100, 1000]):
+        nI = mem.cache(n_mutual_information)(100, n_samples)
+        mean, var = nI.mean(axis=0), nI.var(axis=0)
+        ax = fig.add_subplot(3, 1, i + 1)
+        ax.bar(range(1200), var / mean)
+
     roc_x, roc_y, erange = mem.cache(roc_curves)(10)
     fig = plt.figure(2)
     ax = fig.add_subplot(111)
-    plot1 = ax.plot(roc_x, roc_y)
+    plot1 = ax.plot(roc_y, roc_x)
     dis = np.sqrt((roc_x - roc_y) ** 2)
     tau_opt = erange[dis.argmax()]
     fp, fn, tp, tn = compute_ratios(tau_opt, p_value=True)
@@ -120,9 +122,8 @@ if __name__ == "__main__":
             (tp, fp, tn, fn)
     print "tau %f" % tau_opt
 
-
     roc_x, roc_y, erange = mem.cache(roc_curves)(100)
-    plot2 = ax.plot(roc_x, roc_y)
+    plot2 = ax.plot(roc_y, roc_x)
     dis = np.sqrt((roc_x - roc_y) ** 2)
     tau_opt = erange[dis.argmax()]
     fp, fn, tp, tn = compute_ratios(tau_opt, p_value=True)
@@ -131,7 +132,7 @@ if __name__ == "__main__":
     print "tau %f" % tau_opt
 
     roc_x1, roc_y1, erange1 = mem.cache(roc_curves)(1000)
-    plot3 = ax.plot(roc_x1, roc_y1)
+    plot3 = ax.plot(roc_y1, roc_x1)
     fig.legend((plot1[0], plot2[0], plot3[0]),
                 ('n = 10', 'n = 100', 'n = 1000'))
     dis = np.sqrt((roc_x1 - roc_y1) ** 2)
@@ -141,11 +142,10 @@ if __name__ == "__main__":
         (tp, fp, tn, fn)
     print "tau %f" % tau_opt1
 
-
     fig = plt.figure(3)
     ax = fig.add_subplot(111)
     roc_x, roc_y, erange = mem.cache(roc_curves)(10, p_value=True)
-    plot1 = ax.plot(roc_x, roc_y)
+    plot1 = ax.plot(roc_y, roc_x)
     dis = np.sqrt((roc_x - roc_y) ** 2)
     tau_opt = erange[dis.argmax()]
     fp, fn, tp, tn = compute_ratios(tau_opt, p_value=True)
@@ -154,17 +154,16 @@ if __name__ == "__main__":
     print "tau %f" % tau_opt
 
     roc_x, roc_y, erange = mem.cache(roc_curves)(100, p_value=True)
-    plot2 = ax.plot(roc_x, roc_y)
-    dis = np.sqrt((roc_x - roc_y)**2)
+    plot2 = ax.plot(roc_y, roc_x)
+    dis = np.sqrt((roc_x - roc_y) ** 2)
     tau_opt = erange[dis.argmax()]
     fp, fn, tp, tn = compute_ratios(tau_opt, p_value=True)
     print "n=100, with the FET, found TP %d, FP %d, TN %d, FN %d" % \
             (tp, fp, tn, fn)
     print "tau %f" % tau_opt
 
-
     roc_x, roc_y, erange = mem.cache(roc_curves)(1000, p_value=True)
-    plot3 = ax.plot(roc_x, roc_y)
+    plot3 = ax.plot(roc_y, roc_x)
     fig.legend((plot1[0], plot2[0], plot3[0]),
                 ('n = 10', 'n = 100', 'n = 1000'))
 
@@ -174,4 +173,3 @@ if __name__ == "__main__":
     print "n=1000, with the FET, found TP %d, FP %d, TN %d, FN %d" % \
             (tp, fp, tn, fn)
     print "tau %f" % tau_opt
-

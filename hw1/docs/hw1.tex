@@ -88,7 +88,7 @@ We can also calculate the mutual information estimator analytically:
 
 \begin{figure}
 \begin{center}
-\includegraphics[width=300px]{./images/MI.png}
+\includegraphics[width=500px]{./images/MI.png}
 \end{center}
 \caption{Mutual information for $n=10$, $n=100$ \& $n=1000$}
 \end{figure}
@@ -103,6 +103,25 @@ are the same.
 The mutual information can therefore be used to detect DE genes, by setting a
 threshold.
 
+We calculate the mean of the mutual information over 100 samples, for $n=10$,
+$n=100$, $n=1000$. As $n$ increases, the mean of the Mutual Information tends
+to the anatical solution. The first 1000 genes' mutual information is near
+$0$.
+
+The standard deviation shows the reliability of a statistical test. Yet, is
+hard to interpret by itself. We can compute the relative standard deviation,
+which is much more representative (except for the $1000$ first genes, which
+have a mean tending towards $0$).
+We observe that as $n$ increases, the value of the relative standard deviation
+decreases. Hence, the sample size has a direct impact on the quality of the
+prediction.
+
+\begin{figure}
+\begin{center}
+\includegraphics[width=300px]{./images/MI_RSD.png}
+\end{center}
+\caption{Relative Standard Deviation for $n=10$, $n=100$, $n=1000$}
+\end{figure}
 
 \section{Discovering DE genes using Mutual Information and ROC Curve}
 \begin{figure}
