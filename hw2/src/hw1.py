@@ -47,20 +47,23 @@ lp2 = lp2.repeat(153, axis=0)
 lp = np.zeros((9, 153, 153))
 
 for i in range(153):
-    n0 = (data[i] == 0).sum()
-    n1 = (data[i] == 1).sum()
-    n2 = (data[i] == 2).sum()
+    m0 = (data[i] == 0).sum()
+    m1 = (data[i] == 1).sum()
+    m2 = (data[i] == 2).sum()
 
-    lp[0, i] = (data[:, data[i] == 0] == 0).sum(axis=1).astype(float) / n0
-    lp[1, i] = (data[:, data[i] == 0] == 1).sum(axis=1).astype(float) / n0
-    lp[2, i] = (data[:, data[i] == 0] == 2).sum(axis=1).astype(float) / n0
+    lp[0, i] = - n0 * (data[:, data[i] == 0] == 0).sum(axis=1).astype(float) / m0
+    lp[1, i] = - n1 * (data[:, data[i] == 0] == 1).sum(axis=1).astype(float) / m0
+    lp[2, i] = - n2 * (data[:, data[i] == 0] == 2).sum(axis=1).astype(float) / m0
 
-    lp[3, i] = (data[:, data[i] == 1] == 0).sum(axis=1).astype(float) / n1
-    lp[4, i] = (data[:, data[i] == 1] == 1).sum(axis=1).astype(float) / n1
-    lp[5, i] = (data[:, data[i] == 1] == 2).sum(axis=1).astype(float) / n1
+    lp[3, i] = - n0 * (data[:, data[i] == 1] == 0).sum(axis=1).astype(float) / m1
+    lp[4, i] = - n1 * (data[:, data[i] == 1] == 1).sum(axis=1).astype(float) / m1
+    lp[5, i] = - n2 * (data[:, data[i] == 1] == 2).sum(axis=1).astype(float) / m1
 
-    lp[6, i] = (data[:, data[i] == 2] == 0).sum(axis=1).astype(float) / n2
-    lp[7, i] = (data[:, data[i] == 2] == 1).sum(axis=1).astype(float) / n2
-    lp[8, i] = (data[:, data[i] == 2] == 2).sum(axis=1).astype(float) / n2
+    lp[6, i] = - n0 * (data[:, data[i] == 2] == 0).sum(axis=1).astype(float) / m2
+    lp[7, i] = - n1 * (data[:, data[i] == 2] == 1).sum(axis=1).astype(float) / m2
+    lp[8, i] = - n2 * (data[:, data[i] == 2] == 2).sum(axis=1).astype(float) / m2
 
+lp = - lp * np.log(lp)
 lp[np.isnan(lp)] = 0
+
+I = lp0 + lp1 - lp.sum(axis=0)
