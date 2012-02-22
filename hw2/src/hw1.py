@@ -1,8 +1,17 @@
+import sys
 import numpy as np
+import pydot
+from matplotlib import pyplot as plt
+
+from sklearn.externals.joblib import Memory
 
 from data import load_data
+from mutual_information import mutual_information
+
+mem = Memory(cachedir='./')
 
 data = load_data()
+n_samples = data.shape[1]
 
 # Let's discretize the expression levels
 thres = data.flatten()
@@ -16,54 +25,148 @@ data[data >= b] = 2
 
 ###############################################################################
 # Calculate the mutual information
-n_samples = data.shape[1]
-n0 = (data == 0).sum(axis=1).astype(float) / n_samples
-n1 = (data == 1).sum(axis=1).astype(float) / n_samples
-n2 = (data == 2).sum(axis=1).astype(float) / n_samples
 
-# Calculate each term of the sum, and make sure none of them are NaNs (not a
-# number). Replace NaNs with 0
+I = mem.cache(mutual_information)(data)
 
-lp0 = - n0 * np.log(n0)
-lp0[np.isnan(lp0)] = 0
+###############################################################################
+# P - Values
+#
+# Compute p_values by permuting the data matrix, and recomputing mutual
+# information.
 
-lp1 = - n1 * np.log(n1)
-lp1[np.isnan(lp1)] = 0
 
-lp2 = - n2 * np.log(n2)
-lp2[np.isnan(lp2)] = 0
+def compute_pvalues(data, num_perm=500):
+    logfile = sys.stdout
+    p_value = np.zeros((153, 153))
+    data_shuffled = data.copy()
+    perc = 0
+    for n in range(num_perm):
+        if n * 100 / num_perm >= perc:
+            logfile.write('\r%d %%' % perc)
+            logfile.flush()
+            perc += 1
+        for i in range(len(data)):
+            np.random.shuffle(data_shuffled[i])
 
-# Now copy these values 153 and reshape them, in order to obtain a 153 * 153
-# matrix
-lp0.shape = (1, 153)
-lp0 = lp0.repeat(153, axis=0)
+        I_shuffled = mutual_information(data_shuffled)
+        p_value += (I_shuffled > I).astype(float)
 
-lp1.shape = (1, 153)
-lp1 = lp1.repeat(153, axis=0)
+    p_value /= num_perm
+    return p_value
 
-lp2.shape = (1, 153)
-lp2 = lp2.repeat(153, axis=0)
+p_value = mem.cache(compute_pvalues)(data, num_perm=1500)
 
-lp = np.zeros((9, 153, 153))
 
-for i in range(153):
-    m0 = (data[i] == 0).sum()
-    m1 = (data[i] == 1).sum()
-    m2 = (data[i] == 2).sum()
+###############################################################################
+# Compute graph
+def compute_graph(p_value, alpha=0.75):
+    graph = (p_value > alpha)
 
-    lp[0, i] = - n0 * (data[:, data[i] == 0] == 0).sum(axis=1).astype(float) / m0
-    lp[1, i] = - n1 * (data[:, data[i] == 0] == 1).sum(axis=1).astype(float) / m0
-    lp[2, i] = - n2 * (data[:, data[i] == 0] == 2).sum(axis=1).astype(float) / m0
+    nodes = []
+    for i in range(graph.shape[0]):
+        el = []
+        for j in range(graph.shape[0]):
+            if graph[i, j]:
+                el.append(j)
+        nodes.append(el)
+    return graph, nodes
 
-    lp[3, i] = - n0 * (data[:, data[i] == 1] == 0).sum(axis=1).astype(float) / m1
-    lp[4, i] = - n1 * (data[:, data[i] == 1] == 1).sum(axis=1).astype(float) / m1
-    lp[5, i] = - n2 * (data[:, data[i] == 1] == 2).sum(axis=1).astype(float) / m1
+graph, nodes = compute_graph(p_value)
 
-    lp[6, i] = - n0 * (data[:, data[i] == 2] == 0).sum(axis=1).astype(float) / m2
-    lp[7, i] = - n1 * (data[:, data[i] == 2] == 1).sum(axis=1).astype(float) / m2
-    lp[8, i] = - n2 * (data[:, data[i] == 2] == 2).sum(axis=1).astype(float) / m2
+###############################################################################
+# Let's visualise the data with pydot
+print "Generating graph"
 
-lp = - lp * np.log(lp)
-lp[np.isnan(lp)] = 0
 
-I = lp0 + lp1 - lp.sum(axis=0)
+def export_graph(nodes, filename='example_graph.dot'):
+    dot_graph = pydot.Dot(graph_type='graph')
+    logfile = sys.stdout
+    for i in range(len(nodes)):
+        logfile.write('.')
+        logfile.flush()
+        for k in nodes[i]:
+            if k > i:
+                continue
+            edge = pydot.Edge("%d" % i, "%d" % k)
+            dot_graph.add_edge(edge)
+    print "writing file"
+    dot_graph.write_raw(filename)
+
+###############################################################################
+# Now, let's destroy all loops
+
+print "cleaning up graph"
+sets = []
+for i in range(data.shape[0]):
+    for j in nodes[i]:
+        for k in nodes[j]:
+            if k != i:
+                sets.append((i, j, k))
+
+for i, j, k in sets:
+    ij = p_value[i, j]
+    ik = p_value[i, k]
+    jk = p_value[k, j]
+
+    if ij <= ik and ij <= jk:
+        p_value[i, j] = 0
+        p_value[j, i] = 0
+    elif ik <= ij and ik <= jk:
+        p_value[i, k] = 0
+        p_value[k, i] = 0
+    else:
+        p_value[j, k] = 0
+        p_value[k, j] = 0
+
+graph, nodes = compute_graph(p_value)
+export_graph(nodes, filename='final_graph.dot')
+
+###############################################################################
+# Compare to results
+true_graph = load_data(filename='interactions.csv')
+true_graph, true_nodes = compute_graph(true_graph)
+
+
+def compute_precision_recall(nodes, true_nodes):
+    precision = 0.
+    total_precision = 0.
+    recall = 0.
+    total_recall = 0.
+    for i in range(len(nodes)):
+        for k in nodes[i]:
+            total_precision += 1
+            if k in true_nodes[i]:
+                precision += 1
+        for k in true_nodes[i]:
+            total_recall += 1
+            if k in nodes[i]:
+                recall += 1
+    if total_precision != 0:
+        precision /= total_precision
+    recall /= total_recall
+    return precision, recall
+
+precision, recall = compute_precision_recall(nodes, true_nodes)
+
+###############################################################################
+# Compute precision-recall curve with alpha varying
+
+precisions = []
+recalls = []
+for alpha in range(1, 99):
+    alpha = float(alpha) / 100
+    graph, nodes = compute_graph(p_value, alpha=alpha)
+    precision, recall = compute_precision_recall(nodes, true_nodes)
+    precisions.append(precision)
+    recalls.append(recall)
+
+for alpha, precision, recall in zip(range(1, 99), precisions, recalls):
+    if precision == 1 and recall == 1:
+        print "best alpha %d" % alpha
+        break
+
+fig = plt.figure(0)
+ax = fig.add_subplot(111)
+ax.plot(recalls, precisions, 'o-')
+
+graph, nodes = compute_graph(p_value, alpha=float(alpha) / 100)
