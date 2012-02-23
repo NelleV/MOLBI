@@ -28,13 +28,12 @@ data[data >= b] = 2
 
 I = mem.cache(mutual_information)(data)
 
+
 ###############################################################################
 # P - Values
 #
 # Compute p_values by permuting the data matrix, and recomputing mutual
 # information.
-
-
 def compute_pvalues(data, num_perm=500):
     logfile = sys.stdout
     p_value = np.zeros((153, 153))
@@ -54,119 +53,109 @@ def compute_pvalues(data, num_perm=500):
     p_value /= num_perm
     return p_value
 
-p_value = mem.cache(compute_pvalues)(data, num_perm=1500)
+
+def clean_up_p_value(p_value):
+    p_value += np.identity(153)
+    # Add some noise, to  deal with p_value's equal to 0
+    # p_value += 1e-16 * np.random.random(p_value.shape)
+    return p_value
+
+p_value = mem.cache(compute_pvalues)(data, num_perm=50)
+p_value = mem.cache(clean_up_p_value)(p_value)
+
+def clean_up_graph(p_value, nodes, graph):
+    print "number of nodes: %d" % graph.sum()
+    for i in range(len(graph)):
+        graph[i, i] = False
+        for j in range(len(graph)):
+            if not graph[i, j]:
+                continue
+            for k in range(len(graph)):
+                if not graph[j, k]:
+                    continue
+                elif graph[k, i]:
+                    ij = p_value[i, j]
+                    ik = p_value[i, k]
+                    jk = p_value[k, j]
+
+                    if ij > ik and ij > jk:
+                        graph[i, j] = False
+                        graph[j, i] = False
+                    elif ik > ij and ik > jk:
+                        graph[i, k] = False
+                        graph[k, i] = False
+                    else:
+                        graph[j, k] = False
+                        graph[k, j] = False
+    print "number of remaining nodes: %d" % graph.sum()
+    return graph
 
 
-###############################################################################
-# Compute graph
-def compute_graph(p_value, alpha=0.75):
-    graph = (p_value > alpha)
+def compute_graph(p_value, alpha=0.75, true_graph=False):
+    if true_graph:
+        graph = p_value == 1
+    else:
+        graph = (p_value <= alpha)
 
     nodes = []
-    for i in range(graph.shape[0]):
-        el = []
-        for j in range(graph.shape[0]):
-            if graph[i, j]:
-                el.append(j)
-        nodes.append(el)
     return graph, nodes
 
-graph, nodes = compute_graph(p_value)
 
-###############################################################################
-# Let's visualise the data with pydot
-print "Generating graph"
-
-
-def export_graph(nodes, filename='example_graph.dot'):
+def export_graph(graph, filename='example_graph.dot'):
     dot_graph = pydot.Dot(graph_type='graph')
     logfile = sys.stdout
-    for i in range(len(nodes)):
+    for i in range(len(graph)):
+
         logfile.write('.')
         logfile.flush()
-        for k in nodes[i]:
-            if k > i:
+        for j in range(len(graph)):
+            if j > i or not graph[j, i]:
                 continue
-            edge = pydot.Edge("%d" % i, "%d" % k)
+            edge = pydot.Edge("%d" % i, "%d" % j)
             dot_graph.add_edge(edge)
     print "writing file"
     dot_graph.write_raw(filename)
 
+
 ###############################################################################
-# Now, let's destroy all loops
-
-print "cleaning up graph"
-sets = []
-for i in range(data.shape[0]):
-    for j in nodes[i]:
-        for k in nodes[j]:
-            if k != i:
-                sets.append((i, j, k))
-
-for i, j, k in sets:
-    ij = p_value[i, j]
-    ik = p_value[i, k]
-    jk = p_value[k, j]
-
-    if ij <= ik and ij <= jk:
-        p_value[i, j] = 0
-        p_value[j, i] = 0
-    elif ik <= ij and ik <= jk:
-        p_value[i, k] = 0
-        p_value[k, i] = 0
+def compute_precision_recall(graph, true_graph):
+    tp = graph[true_graph].sum()
+    if graph.sum() != 0:
+        precision = float(tp) / graph.sum()
     else:
-        p_value[j, k] = 0
-        p_value[k, j] = 0
+        precision = 0
 
-graph, nodes = compute_graph(p_value)
-export_graph(nodes, filename='final_graph.dot')
+    recall = float(tp) / true_graph.sum()
+    print tp, precision, recall
 
-###############################################################################
-# Compare to results
-true_graph = load_data(filename='interactions.csv')
-true_graph, true_nodes = compute_graph(true_graph)
-
-
-def compute_precision_recall(nodes, true_nodes):
-    precision = 0.
-    total_precision = 0.
-    recall = 0.
-    total_recall = 0.
-    for i in range(len(nodes)):
-        for k in nodes[i]:
-            total_precision += 1
-            if k in true_nodes[i]:
-                precision += 1
-        for k in true_nodes[i]:
-            total_recall += 1
-            if k in nodes[i]:
-                recall += 1
-    if total_precision != 0:
-        precision /= total_precision
-    recall /= total_recall
     return precision, recall
 
-precision, recall = compute_precision_recall(nodes, true_nodes)
-
-###############################################################################
-# Compute precision-recall curve with alpha varying
+true_graph = load_data(filename='interactions.csv')
+true_graph, true_nodes = compute_graph(true_graph, true_graph=True)
+true_graph = clean_up_graph(true_graph, true_nodes, true_graph)
 
 precisions = []
 recalls = []
-for alpha in range(1, 99):
-    alpha = float(alpha) / 100
-    graph, nodes = compute_graph(p_value, alpha=alpha)
-    precision, recall = compute_precision_recall(nodes, true_nodes)
+for alpha in range(0, 1000, 20):
+    alpha = float(alpha) / 1000
+    graph, nodes = mem.cache(compute_graph)(p_value, alpha=alpha)
+    graph = mem.cache(clean_up_graph)(p_value, nodes, graph)
+    precision, recall = mem.cache(compute_precision_recall)(graph, true_graph)
     precisions.append(precision)
     recalls.append(recall)
 
-for alpha, precision, recall in zip(range(1, 99), precisions, recalls):
-    if precision == 1 and recall == 1:
-        print "best alpha %d" % alpha
-        break
+# Recompute for alpha very small
+alpha = 0.002
+graph, nodes = mem.cache(compute_graph)(p_value, alpha=alpha)
+graph = mem.cache(clean_up_graph)(p_value, nodes, graph)
+export_graph(graph)
 
 fig = plt.figure(0)
 ax = fig.add_subplot(111)
 ax.plot(recalls, precisions, 'o-')
 
-graph, nodes = compute_graph(p_value, alpha=float(alpha) / 100)
+###############################################################################
+# False discovery rate
+fig = plt.figure(1)
+ax = fig.add_subplot(111)
+ax.plot(recalls, 1 - np.array(precisions), 'o-')
